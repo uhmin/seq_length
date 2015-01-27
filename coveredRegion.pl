@@ -14,36 +14,68 @@ sub main{
 sub interface{
     my %options;
     my $i;
+    my $key;
+    my $value;
+    $options{"-i"}="F";
+    $options{"-a"}="F";
     for($i=0; $i<@ARGV; $i++){
-	if($ARGV[$i] eq "--inverse"){
-	    $options{"inverse"}=1;
-	}elsif($ARGV[$i] eq "--anysubject"){
-	    $options{"anysubject"}=1;
+	$key=$ARGV[$i];
+	$value=$ARGV[$i+1];
+	if($key eq "-i" || $key eq "-a" 
+	   || $key eq "-c"){
+	    $options{$key}=$value;
+	    $i++;
+	}elsif($key eq "--inverse"){
+	    $options{"-i"}="T";
+	}elsif($key eq "--anysubject"){
+	    $options{"-a"}="T";
 	}else{
-	    print stderr "Unknown option: $ARGV[$i]\n";
+	    print stderr "Unknown option: $key\n";
 	    &help;
 	}
+    }
+    if($options{"-i"} ne "T" && $options{"-i"} ne "F"){
+	print stderr "-i option should be T or F\n";
+	&help;
+    }
+    if($options{"-a"} ne "T" && $options{"-a"} ne "F"){
+	print stderr "-a option should be T or F\n";
+	&help;
     }
     return %options;
 }
 
 sub help{
     my $file=__FILE__;
+    $file=~s/.*\///;
     print stderr << "EOF";
---anysubject: If you specify this option, $file will ignore subject sequence name.
-              This means, $file will calculate cover region of any subject sequence at once.
---inverse:    If you specify this option, $file will calculate the cover region of 
-              the subject sequence.
+
+-c: [integer] Cuotff cover ratio. 
+    $file will discard subjects having 
+    less than this cover ratio.
+
+-a: [T/F] If you specify this option, 
+    $file will ignore subject sequence name.
+    This means, $file will calculate cover region 
+    of any subject sequence at once.
+
+-i: [T/F] If you specify this option, $file will calculate 
+    the cover region of the subject sequence.
+
+--anysubject: Same meaning as -a T
+--inverse:    Same meaning as -i T
 
   This program calculates coverd region of query sequence.
 $file < blast_tabular_file > output
 
   If coverd region of subject regopm, do this.
 $file --inverse < blast_tabular_file > output
+$file -i T      < blast_tabular_file > output
 
   If you want to calculate cover region of such 
    as alot of small sequences to the query sequence, do this.
 $file --anysubject < blast_tabular_file > output
+$file -a T         < blast_tabular_file > output
 
 EOF
 ;
@@ -57,13 +89,13 @@ sub readData{ #(%options);
     my @data; 
     my @tmpdata;
     my @region;
-    my $blindDB=$options->{"anysubject"};
+    my $blindDB=$options->{"-a"};
 
     while($line=<stdin>){
 	if($line!~/\w/){ next; }
 	chomp($line);
 	@tmpdata=split(/\t/,$line);
-	if($options->{"inverse"}){
+	if($options->{"-i"} eq "T"){
 #	    $,="\t";
 #	    print @tmpdata;
 #	    print "\n";
@@ -72,7 +104,7 @@ sub readData{ #(%options);
 #	    print "\n";
 	}
 
-	if($blindDB==1){
+	if($blindDB eq "T"){
 	    $tmpdata[1]="all";
 	}
 	if($i>0 && 
@@ -81,7 +113,7 @@ sub readData{ #(%options);
 #	    print "$data[$i][0] v.s. $data[$i-1][0]\n";
 #	    print "$data[$i][1] v.s. $data[$i-1][1]\n\n";
 	    @region=&process(@data);
-	    &showResult(\@region, \@data);
+	    &showResult(\@region, \@data, $options);
 	    $i=0;
 	    @data=();
 #	    @{$data[$i]}=split(/\t/,$line);
@@ -93,7 +125,7 @@ sub readData{ #(%options);
 	$i++;
     }
     @region=&process(@data);
-    &showResult(\@region, \@data);
+    &showResult(\@region, \@data, $options);
 }
 
 sub inverse{ #(@tmpdata);
@@ -173,6 +205,7 @@ sub max{
 sub showResult{
     my @region=@{$_[0]};
     my @data=@{$_[1]};
+    my $options=$_[2];
     my @result;
     my $i; my $j; my $regionNum=scalar(@region);
     my $hitLength; my $sumLength;
@@ -204,20 +237,32 @@ sub showResult{
 	$sumLength+=$hitLength;
 	$preposition=$region[$i][1]+1;
     }
+    if($sumLength*100/$data[0][12] >= $options->{"-c"}){
+	&printResult($regionNum, \@data, $sumLength, \@result);
+    }
+}
+
+sub printResult{
+    my $regionNum=$_[0];
+    my $data=$_[1];
+    my $sumLength=$_[2];
+    my $result=$_[3];
+    my $i;
+    my $j;
     for($i=0; $i<$regionNum; $i++){
 	for($j=0; $j<17; $j++){
 	    if($j==11){
-		if($data[0][12]==0){
+		if($data->[0][12]==0){
 		    printf("--\t");
 		}else{
-		    printf("%.1f\t", $sumLength*100/$data[0][12]);
+		    printf("%.1f\t", $sumLength*100/$data->[0][12]);
 		}
 	    }elsif($j==2){
-		printf("%.1f\t",$result[$i][$j]);
+		printf("%.1f\t",$result->[$i][$j]);
 	    }elsif($j==10){
 		print $sumLength."\t";
 	    }else{
-		print $result[$i][$j]."\t";
+		print $result->[$i][$j]."\t";
 	    }
 	}
 #	print $sumLength."----\n";
